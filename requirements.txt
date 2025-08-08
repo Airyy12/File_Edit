@@ -3,6 +3,3 @@ pandas
 openpyxl
 numpy
 xlrd
-PyQt5.QtWidgets
-io.BytesIO
-random
