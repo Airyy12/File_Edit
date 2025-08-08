@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 import random
+import os
 
 st.set_page_config(page_title="Pemetaan Petir PPU", layout="wide")
 st.title("📊 Aplikasi Pengolahan Data Petir PPU")
@@ -46,9 +47,9 @@ with tab1:
     st.header("📁 Gabungkan Banyak File Excel")
 
     uploaded_files = st.file_uploader(
-        "Upload beberapa file Excel (.xlsx)",
+        "Upload beberapa file Excel (.xlsx/.xls)",
         accept_multiple_files=True,
-        type=["xlsx"],
+        type=["xlsx", "xls"],
         key=st.session_state["uploader_key"]
     )
 
@@ -84,37 +85,56 @@ with tab1:
         else:
             all_data = []
             for file in st.session_state["uploaded_files"]:
-                xls = pd.ExcelFile(file)
+                filename = file.name.lower()
+                ext = os.path.splitext(filename)[-1]
+                try:
+                    if ext == ".xls":
+                        xls = pd.ExcelFile(file, engine="xlrd")
+                    else:
+                        xls = pd.ExcelFile(file, engine="openpyxl")
+                except Exception as e:
+                    st.session_state["gabung_log"] += f"❌ {file.name} - Gagal membaca file: {e}\n"
+                    continue
                 for sheet in xls.sheet_names:
-                    df = pd.read_excel(xls, sheet)
+                    try:
+                        if ext == ".xls":
+                            df = pd.read_excel(xls, sheet, engine="xlrd")
+                        else:
+                            df = pd.read_excel(xls, sheet, engine="openpyxl")
+                    except Exception as e:
+                        st.session_state["gabung_log"] += f"❌ {file.name} - Sheet '{sheet}' gagal dibaca: {e}\n"
+                        continue
                     if df.empty:
                         st.session_state["gabung_log"] += f"⚠️ {file.name} - Sheet '{sheet}' kosong, dilewati.\n"
                         continue
                     all_data.append(df)
                     st.session_state["gabung_log"] += f"✅ {file.name} - Sheet '{sheet}' ({len(df)} baris)\n"
 
-            combined = pd.concat(all_data, ignore_index=True)
-            total = len(combined)
-            st.session_state["gabung_log"] += f"\n📊 Total baris gabungan: {total}"
+            if not all_data:
+                st.session_state["gabung_log"] += "\n❌ Tidak ada data yang berhasil digabung."
+            else:
+                combined = pd.concat(all_data, ignore_index=True)
+                total = len(combined)
+                st.session_state["gabung_log"] += f"\n📊 Total baris gabungan: {total}"
 
-            max_rows = 65000
-            num_sheets = (total // max_rows) + 1
-            output = BytesIO()
+                max_rows = 65000
+                num_sheets = (total // max_rows) + 1
+                output = BytesIO()
 
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                for i in range(num_sheets):
-                    part = combined.iloc[i*max_rows:(i+1)*max_rows]
-                    part.to_excel(writer, index=False, sheet_name=f"Data_{i+1}")
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    for i in range(num_sheets):
+                        part = combined.iloc[i*max_rows:(i+1)*max_rows]
+                        part.to_excel(writer, index=False, sheet_name=f"Data_{i+1}")
 
-            output.seek(0)
-            filename = f"TotalGabungan_{bulan1}.xlsx"
-            st.download_button(
-                "📥 Download File Gabungan",
-                data=output,
-                file_name=filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=lambda: st.session_state.update({"reset_flag": True})
-            )
+                output.seek(0)
+                filename = f"TotalGabungan_{bulan1}.xlsx"
+                st.download_button(
+                    "📥 Download File Gabungan",
+                    data=output,
+                    file_name=filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    on_click=lambda: st.session_state.update({"reset_flag": True})
+                )
 
     if st.session_state["gabung_log"]:
         st.text_area("Log Proses", st.session_state["gabung_log"], height=200)
@@ -135,7 +155,12 @@ with tab2:
             st.warning("⚠️ Upload file terlebih dahulu.")
         else:
             try:
-                df = pd.read_excel(file)
+                filename = file.name.lower()
+                ext = os.path.splitext(filename)[-1]
+                if ext == ".xls":
+                    df = pd.read_excel(file, engine="xlrd")
+                else:
+                    df = pd.read_excel(file, engine="openpyxl")
 
                 if not {'NAMOBJ', 'Jenis', 'FREQUENCY'}.issubset(df.columns):
                     st.error("❌ Kolom wajib: NAMOBJ, Jenis, FREQUENCY")
