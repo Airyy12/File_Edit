@@ -180,11 +180,12 @@ with tab2:
                 else:
                     df = pd.read_excel(file, engine="openpyxl")
 
-                if not {'NAMOBJ', 'Jenis', 'FREQUENCY'}.issubset(df.columns):
-                    st.error("❌ Kolom wajib: NAMOBJ, Jenis, FREQUENCY")
+                # Ganti 'NAMOBJ' menjadi 'Kelurahan'
+                if not {'Kelurahan', 'Jenis', 'FREQUENCY'}.issubset(df.columns):
+                    st.error("❌ Kolom wajib: Kelurahan, Jenis, FREQUENCY")
                 else:
                     pivot_df = df.pivot_table(
-                        index='NAMOBJ',
+                        index='Kelurahan',
                         columns='Jenis',
                         values='FREQUENCY',
                         aggfunc='sum'
@@ -195,11 +196,15 @@ with tab2:
                     pivot_df = pivot_df.rename(columns={
                         'Positive Cloud to Ground': 'CG+',
                         'Negative Cloud to Ground': 'CG-',
-                        'NAMOBJ': 'Nama Lokasi'
+                        'Kelurahan': 'Nama Lokasi'
                     })
 
-                    # Merge dengan master lokasi
-                    result = pd.merge(df_master, pivot_df, on='Nama Lokasi', how='left').fillna(0)
+                    # Ambil daftar kelurahan unik dari file yang di-upload
+                    lokasi_unik = df['Kelurahan'].drop_duplicates().sort_values().reset_index(drop=True)
+                    df_lokasi = pd.DataFrame({"Nama Lokasi": lokasi_unik})
+
+                    # Merge dengan daftar kelurahan dari file, bukan dari master tetap
+                    result = pd.merge(df_lokasi, pivot_df, on='Nama Lokasi', how='left').fillna(0)
 
                     # Pastikan tipe data angka
                     result['CG+'] = result['CG+'].astype(int)
